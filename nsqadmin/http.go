@@ -55,6 +55,7 @@ func httpServer(listener net.Listener) {
 	handler.HandleFunc("/ping", pingHandler)
 	handler.HandleFunc("/", indexHandler)
 	handler.HandleFunc("/nodes", nodesHandler)
+	handler.HandleFunc("/node/", nodeHandler)
 	handler.HandleFunc("/topic/", topicHandler)
 	handler.HandleFunc("/tombstone_topic_producer", tombstoneTopicProducerHandler)
 	handler.HandleFunc("/delete_topic", deleteTopicHandler)
@@ -571,6 +572,47 @@ func pauseChannelHandler(w http.ResponseWriter, req *http.Request) {
 	NotifyAdminAction(strings.TrimLeft(req.URL.Path, "/"), topicName, channelName, req)
 
 	http.Redirect(w, req, fmt.Sprintf("/topic/%s/%s", url.QueryEscape(topicName), url.QueryEscape(channelName)), 302)
+}
+
+func nodeHandler(w http.ResponseWriter, req *http.Request) {
+	reqParams, err := util.NewReqParams(req)
+	if err != nil {
+		log.Printf("ERROR: failed to parse request params - %s", err.Error())
+		http.Error(w, "INVALID_REQUEST", 500)
+		return
+	}
+
+	var urlRegex = regexp.MustCompile(`^/node/(.*)$`)
+	matches := urlRegex.FindStringSubmatch(req.URL.Path)
+	if len(matches) == 0 {
+		http.Error(w, "INVALID_NODE", 500)
+		return
+	}
+	parts := strings.Split(matches[1], "/")
+	node := parts[0]
+
+	topicHostStats, channelStats, _ := getNSQDStats([]string{node}, "")
+
+	p := struct {
+		Title          string
+		Version        string
+		GraphOptions   *GraphOptions
+		Node           string
+		TopicHostStats []*TopicHostStats
+		ChannelStats   map[string]*ChannelStats
+	}{
+		Title:          "NSQ Node - " + node,
+		Version:        util.BINARY_VERSION,
+		GraphOptions:   NewGraphOptions(w, req, reqParams),
+		Node:           node,
+		TopicHostStats: topicHostStats,
+		ChannelStats:   channelStats,
+	}
+	err = templates.ExecuteTemplate(w, "node.html", p)
+	if err != nil {
+		log.Printf("Template Error %s", err.Error())
+		http.Error(w, "Template Error", 500)
+	}
 }
 
 func nodesHandler(w http.ResponseWriter, req *http.Request) {

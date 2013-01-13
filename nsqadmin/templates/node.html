@@ -1,0 +1,123 @@
+{{template "header.html" .}}
+{{$g := .GraphOptions}}
+{{$node := .Node}}
+
+<ul class="breadcrumb">
+    <li><a href="/nodes">Nodes</a> <span class="divider">/</span></li>
+    <li class="active">{{$node}}</li>
+</ul>
+
+<div class="row-fluid">
+    <div class="span12">
+        <h4>Message Queues</h4>
+    {{if not .TopicHostStats}}
+        <div class="alert">
+            <h4>Notice</h4> No topics exist on this node.
+        </div>
+    {{else}}
+    {{range .TopicHostStats}}
+        {{$t := .Topic}}
+        <blockquote>
+            <table class="table table-bordered table-condensed">
+                <tr>
+                    <th>Topic</th>
+                    <th>Depth</th>
+                    <th>Memory + Disk</th>
+                    <th>Messages</th>
+                    <th>Channels</th>
+                </tr>
+                <tr>
+                    <td><a href="/tombstone_topic_producer?topic={{$t}}&node={{$node}}&rd=/node/{{$node}}" class="red">✘</a> {{.Topic}}</td>
+                    <td>
+                        {{if $g.Enabled}}<a href="{{.LargeGraph $g "depth"}}"><img width="120" src="{{.Sparkline $g "depth"}}"></a>{{end}}
+                        {{.Depth | commafy}}</td>
+                    <td>{{.MemoryDepth | commafy}} + {{.BackendDepth | commafy}}</td>
+                    <td>
+                        {{if $g.Enabled}}<a href="{{.LargeGraph $g "message_count"}}"><img width="120" src="{{.Sparkline $g "message_count"}}"></a>{{end}}
+                        {{.MessageCount | commafy}}
+                        </td>
+                    <td>{{.ChannelCount}}</td>
+                </tr>
+            </table>
+            <blockquote>
+            {{if not .Channels}}
+            <div class="alert">
+                <h4>Notice</h4> No channels exist for this topic.
+            </div>
+            {{else}}
+            {{range $c := .Channels}}
+            <table class="table table-bordered table-condensed">
+                <tr>
+                    <th>Channel</th>
+                    <th>Depth</th>
+                    <th>Memory + Disk</th>
+                    <th>In-Flight</th>
+                    <th>Deferred</th>
+                    <th>Requeued</th>
+                    <th>Timed Out</th>
+                    <th>Messages</th>
+                    <th>Connections</th>
+                </tr>
+                <tr>
+                    <td>
+                        {{$c.ChannelName}}
+                        {{if $c.Paused}}<span class="label label-important">paused</span>{{end}}
+                    </td>
+                    <td>
+                        {{if $g.Enabled}}<a href="{{$c.LargeGraph $g "depth"}}"><img width="120" height="20" src="{{$c.Sparkline $g "depth"}}"></a>{{end}}
+                        {{$c.Depth | commafy}}</td>
+                    <td>{{$c.MemoryDepth | commafy}} + {{$c.BackendDepth | commafy}}</td>
+                    <td>{{$c.InFlightCount | commafy}}</td>
+                    <td>{{$c.DeferredCount | commafy}}</td>
+                    <td>{{$c.RequeueCount | commafy}}</td>
+                    <td>{{$c.TimeoutCount | commafy}}</td>
+                    <td>{{$c.MessageCount | commafy}}</td>
+                    <td>
+                        {{if $g.Enabled}}<a href="{{$c.LargeGraph $g "clients"}}"><img width="120" height="20" src="{{$c.Sparkline $g "clients"}}"></a>{{end}}
+                        {{$c.ClientCount}}
+                    </td>
+                </tr>
+            </table>
+            <blockquote>
+                {{if not .Clients}}
+                <div class="alert"><h4>Notice</h4>No clients connected to this channel.</div>
+                {{else}}
+                <p>Clients:
+                <table class="table table-bordered table-condensed">
+                    <tr>
+                        <th>Client Host</th>
+                        <th>Protocol</th>
+                        <th>NSQd Host</th>
+                        <th>In-Flight</th>
+                        <th>Ready Count</th>
+                        <th>Finished</th>
+                        <th>Requeued</th>
+                        <th>Messages</th>
+                        <th>Connected</th>
+                    </tr>
+                    {{range .Clients}}
+                    <tr>
+                        <td>{{.ClientIdentifier}}</td>
+                        <td>{{.ClientVersion}}</td>
+                        <td>{{.HostAddress}}</td>
+                        <td>{{.InFlightCount | commafy}}</td>
+                        <td>{{.ReadyCount | commafy}}</td>
+                        <td>{{.FinishCount | commafy}}</td>
+                        <td>{{.RequeueCount | commafy}}</td>
+                        <td>{{.MessageCount | commafy}}</td>
+                        <td>{{.ConnectedDuration}}</td>
+                    </tr>
+                    {{end}}
+                </table>
+                {{end}}
+            </blockquote>
+            {{end}}
+            {{end}}
+            </blockquote>
+        </blockquote>
+    {{end}}
+    {{end}}
+</div>
+
+{{template "js.html" .}}
+{{template "footer.html" .}}

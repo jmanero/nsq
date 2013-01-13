@@ -340,28 +340,29 @@ func getNSQDStats(nsqdHTTPAddrs []string, selectedTopic string) ([]*TopicHostSta
 						}
 						channelStats[channelStatsKey] = channel
 					}
-					h := &ChannelStats{HostAddress: addr, ChannelName: channelName, Topic: topicName}
+					hcs := &ChannelStats{HostAddress: addr, ChannelName: channelName, Topic: topicName}
 					depth := int64(c["depth"].(float64))
 					backendDepth := int64(c["backend_depth"].(float64))
-					h.Depth = depth
+					hcs.Depth = depth
 					var paused bool
 					pausedInterface, ok := c["paused"]
 					if ok {
 						paused = pausedInterface.(bool)
 					}
-					h.Paused = paused
-					h.BackendDepth = backendDepth
-					h.MemoryDepth = depth - backendDepth
-					h.InFlightCount = int64(c["in_flight_count"].(float64))
-					h.DeferredCount = int64(c["deferred_count"].(float64))
-					h.MessageCount = int64(c["message_count"].(float64))
-					h.RequeueCount = int64(c["requeue_count"].(float64))
-					h.TimeoutCount = int64(c["timeout_count"].(float64))
+					hcs.Paused = paused
+					hcs.BackendDepth = backendDepth
+					hcs.MemoryDepth = depth - backendDepth
+					hcs.InFlightCount = int64(c["in_flight_count"].(float64))
+					hcs.DeferredCount = int64(c["deferred_count"].(float64))
+					hcs.MessageCount = int64(c["message_count"].(float64))
+					hcs.RequeueCount = int64(c["requeue_count"].(float64))
+					hcs.TimeoutCount = int64(c["timeout_count"].(float64))
 					clients := c["clients"].([]interface{})
 					// TODO: this is sort of wrong; client's should be de-duped
 					// client A that connects to NSQD-a and NSQD-b should only be counted once. right?
-					h.ClientCount = len(clients)
-					channel.AddHostStats(h)
+					hcs.ClientCount = len(clients)
+					channel.AddHostStats(hcs)
+					h.Channels = append(h.Channels, hcs)
 
 					// "clients": [
 					//   {

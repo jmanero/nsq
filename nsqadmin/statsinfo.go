@@ -42,6 +42,7 @@ type TopicHostStats struct {
 	ChannelCount int
 	Topic        string
 	Aggregate    bool
+	Channels     []*ChannelStats
 }
 
 type ChannelStats struct {
