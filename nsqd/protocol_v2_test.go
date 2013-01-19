@@ -116,11 +116,10 @@ func TestBasicV2(t *testing.T) {
 	err = nsq.Ready(1).Write(conn)
 	assert.Equal(t, err, nil)
 
-	resp, err := nsq.ReadResponse(conn)
+	frameType, data, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
-	frameType, data, err := nsq.UnpackResponse(resp)
-	msgOut, _ := nsq.DecodeMessage(data)
 	assert.Equal(t, frameType, nsq.FrameTypeMessage)
+	msgOut, _ := nsq.DecodeMessage(data)
 	assert.Equal(t, msgOut.Id, msg.Id)
 	assert.Equal(t, msgOut.Body, msg.Body)
 	assert.Equal(t, msgOut.Attempts, uint16(1))
@@ -155,8 +154,7 @@ func TestMultipleConsumerV2(t *testing.T) {
 		assert.Equal(t, err, nil)
 
 		go func(c net.Conn) {
-			resp, _ := nsq.ReadResponse(c)
-			_, data, _ := nsq.UnpackResponse(resp)
+			_, data, _ := nsq.ReadUnpackedResponse(c)
 			msg, _ := nsq.DecodeMessage(data)
 			msgChan <- msg
 		}(conn)
@@ -199,7 +197,7 @@ func TestClientTimeout(t *testing.T) {
 		case <-timer:
 			t.Fatalf("test timed out")
 		default:
-			_, err := nsq.ReadResponse(conn)
+			_, _, err := nsq.ReadUnpackedResponse(conn)
 			if err != nil {
 				goto done
 			}
@@ -228,8 +226,7 @@ func TestClientHeartbeat(t *testing.T) {
 	err = nsq.Ready(1).Write(conn)
 	assert.Equal(t, err, nil)
 
-	resp, _ := nsq.ReadResponse(conn)
-	_, data, _ := nsq.UnpackResponse(resp)
+	_, data, _ := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, data, []byte("_heartbeat_"))
 
 	time.Sleep(10 * time.Millisecond)
@@ -307,8 +304,7 @@ func TestPausing(t *testing.T) {
 	topic.PutMessage(msg)
 
 	// receive the first message via the client, finish it, and send new RDY
-	resp, _ := nsq.ReadResponse(conn)
-	_, data, _ := nsq.UnpackResponse(resp)
+	_, data, _ := nsq.ReadUnpackedResponse(conn)
 	msg, err = nsq.DecodeMessage(data)
 	assert.Equal(t, msg.Body, []byte("test body"))
 
@@ -342,8 +338,7 @@ func TestPausing(t *testing.T) {
 	msg = nsq.NewMessage(<-nsqd.idChan, []byte("test body3"))
 	topic.PutMessage(msg)
 
-	resp, _ = nsq.ReadResponse(conn)
-	_, data, _ = nsq.UnpackResponse(resp)
+	_, data, _ = nsq.ReadUnpackedResponse(conn)
 	msg, err = nsq.DecodeMessage(data)
 	assert.Equal(t, msg.Body, []byte("test body3"))
 }
@@ -384,15 +379,13 @@ func TestSizeLimits(t *testing.T) {
 	sub(t, conn, topicName, "ch")
 
 	nsq.Publish(topicName, make([]byte, 95)).Write(conn)
-	resp, _ := nsq.ReadResponse(conn)
-	frameType, data, _ := nsq.UnpackResponse(resp)
+	frameType, data, _ := nsq.ReadUnpackedResponse(conn)
 	log.Printf("frameType: %d, data: %s", frameType, data)
 	assert.Equal(t, frameType, nsq.FrameTypeResponse)
 	assert.Equal(t, data, []byte("OK"))
 
 	nsq.Publish(topicName, make([]byte, 105)).Write(conn)
-	resp, _ = nsq.ReadResponse(conn)
-	frameType, data, _ = nsq.UnpackResponse(resp)
+	frameType, data, _ = nsq.ReadUnpackedResponse(conn)
 	log.Printf("frameType: %d, data: %s", frameType, data)
 	assert.Equal(t, frameType, nsq.FrameTypeError)
 	assert.Equal(t, string(data), fmt.Sprintf("E_BAD_MESSAGE PUB message too big 105 > 100"))
@@ -408,8 +401,7 @@ func TestSizeLimits(t *testing.T) {
 	}
 	cmd, _ := nsq.MultiPublish(topicName, mpub)
 	cmd.Write(conn)
-	resp, _ = nsq.ReadResponse(conn)
-	frameType, data, _ = nsq.UnpackResponse(resp)
+	frameType, data, _ = nsq.ReadUnpackedResponse(conn)
 	log.Printf("frameType: %d, data: %s", frameType, data)
 	assert.Equal(t, frameType, nsq.FrameTypeResponse)
 	assert.Equal(t, data, []byte("OK"))
@@ -421,8 +413,7 @@ func TestSizeLimits(t *testing.T) {
 	}
 	cmd, _ = nsq.MultiPublish(topicName, mpub)
 	cmd.Write(conn)
-	resp, _ = nsq.ReadResponse(conn)
-	frameType, data, _ = nsq.UnpackResponse(resp)
+	frameType, data, _ = nsq.ReadUnpackedResponse(conn)
 	log.Printf("frameType: %d, data: %s", frameType, data)
 	assert.Equal(t, frameType, nsq.FrameTypeError)
 	assert.Equal(t, string(data), fmt.Sprintf("E_BAD_BODY MPUB body too big 1148 > 1000"))
@@ -438,8 +429,7 @@ func TestSizeLimits(t *testing.T) {
 	}
 	cmd, _ = nsq.MultiPublish(topicName, mpub)
 	cmd.Write(conn)
-	resp, _ = nsq.ReadResponse(conn)
-	frameType, data, _ = nsq.UnpackResponse(resp)
+	frameType, data, _ = nsq.ReadUnpackedResponse(conn)
 	log.Printf("frameType: %d, data: %s", frameType, data)
 	assert.Equal(t, frameType, nsq.FrameTypeError)
 	assert.Equal(t, string(data), fmt.Sprintf("E_BAD_MESSAGE MPUB message too big 101 > 100"))
@@ -543,12 +533,8 @@ func benchmarkProtocolV2Pub(b *testing.B, size int) {
 				if err != nil {
 					panic(err.Error())
 				}
-				resp, err := nsq.ReadResponse(rw)
-				if err != nil {
-					panic(err.Error())
-				}
-				_, data, _ := nsq.UnpackResponse(resp)
-				if !bytes.Equal(data, []byte("OK")) {
+				_, data, err := nsq.ReadUnpackedResponse(rw)
+				if err != nil || !bytes.Equal(data, []byte("OK")) {
 					panic("invalid response")
 				}
 			}
@@ -632,11 +618,7 @@ func subWorker(n int, workers int, tcpAddr *net.TCPAddr, topicName string, rdyCh
 	numRdy := num/rdyCount - 1
 	rdy := rdyCount
 	for i := 0; i < num; i += 1 {
-		resp, err := nsq.ReadResponse(rw)
-		if err != nil {
-			panic(err.Error())
-		}
-		frameType, data, err := nsq.UnpackResponse(resp)
+		frameType, data, err := nsq.ReadUnpackedResponse(rw)
 		if err != nil {
 			panic(err.Error())
 		}

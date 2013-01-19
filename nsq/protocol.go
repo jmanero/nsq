@@ -51,22 +51,6 @@ type Protocol interface {
 	IOLoop(conn net.Conn) error
 }
 
-// SendResponse is a server side utility function to prefix data with a length header
-// and write to the supplied Writer
-func SendResponse(w io.Writer, data []byte) (int, error) {
-	err := binary.Write(w, binary.BigEndian, int32(len(data)))
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := w.Write(data)
-	if err != nil {
-		return 0, err
-	}
-
-	return (n + 4), nil
-}
-
 // SendFramedResponse is a server side utility function to prefix data with a length header
 // and frame header and write to the supplied Writer
 func SendFramedResponse(w io.Writer, frameType int32, data []byte) (int, error) {
@@ -89,47 +73,35 @@ func SendFramedResponse(w io.Writer, frameType int32, data []byte) (int, error) 
 	return n + 8, err
 }
 
-// ReadResponse is a client-side utility function to read from the supplied Reader
-// according to the NSQ protocol spec:
+// ReadUnpackedResponse is a client-side utility function that reads
+// and unpacks serialized data according to NSQ protocol spec:
 //
-//    [x][x][x][x][x][x][x][x]...
-//    |  (int32) || (binary)
-//    |  4-byte  || N-byte
-//    ------------------------...
-//        size       data
-func ReadResponse(r io.Reader) ([]byte, error) {
+//    [x][x][x][x][x][x][x][x][x][x][x][x]...
+//    |  (int32) ||  (int32) || (binary)
+//    |  4-byte  ||  4-byte  || N-byte
+//    ------------------------------------...
+//        size      frame ID     data
+//
+// Returns a triplicate of: frame type, data ([]byte), error
+func ReadUnpackedResponse(r io.Reader) (int32, []byte, error) {
 	var msgSize int32
 
 	// message size
 	err := binary.Read(r, binary.BigEndian, &msgSize)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 
 	// message binary data
 	buf := make([]byte, msgSize)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 
-	return buf, nil
-}
-
-// UnpackResponse is a client-side utility function that unpacks serialized data
-// according to NSQ protocol spec:
-//
-//    [x][x][x][x][x][x][x][x]...
-//    |  (int32) || (binary)
-//    |  4-byte  || N-byte
-//    ------------------------...
-//      frame ID     data
-//
-// Returns a triplicate of: frame type, data ([]byte), error
-func UnpackResponse(response []byte) (int32, []byte, error) {
-	if len(response) < 4 {
+	if len(buf) < 4 {
 		return -1, nil, errors.New("length of response is too small")
 	}
 
-	return int32(binary.BigEndian.Uint32(response)), response[4:], nil
+	return int32(binary.BigEndian.Uint32(buf)), buf[4:], nil
 }

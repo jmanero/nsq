@@ -47,6 +47,8 @@ func (lp *LookupPeer) Connect() error {
 		return err
 	}
 	lp.conn = conn
+	lp.Write(MagicV2)
+	lp.state = StateConnected
 	return nil
 }
 
@@ -79,31 +81,29 @@ func (lp *LookupPeer) Close() error {
 // reconnecting in the event of a failure.
 //
 // It returns the response from nsqlookupd as []byte
-func (lp *LookupPeer) Command(cmd *Command) ([]byte, error) {
+func (lp *LookupPeer) Command(cmd *Command) (int32, []byte, error) {
 	initialState := lp.state
 	if lp.state != StateConnected {
 		err := lp.Connect()
 		if err != nil {
-			return nil, err
+			return -1, nil, err
 		}
-		lp.state = StateConnected
-		lp.Write(MagicV1)
 		if initialState == StateDisconnected {
 			lp.connectCallback(lp)
 		}
 	}
 	if cmd == nil {
-		return nil, nil
+		return -1, nil, nil
 	}
 	err := cmd.Write(lp)
 	if err != nil {
 		lp.Close()
-		return nil, err
+		return -1, nil, err
 	}
-	resp, err := ReadResponse(lp)
+	frameType, data, err := ReadUnpackedResponse(lp)
 	if err != nil {
 		lp.Close()
-		return nil, err
+		return -1, nil, err
 	}
-	return resp, nil
+	return frameType, data, nil
 }

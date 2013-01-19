@@ -68,12 +68,8 @@ func pubWorker(n int, tcpAddr string, batchSize int, batch [][]byte, topic strin
 		if err != nil {
 			panic(err.Error())
 		}
-		resp, err := nsq.ReadResponse(rw)
-		if err != nil {
-			panic(err.Error())
-		}
-		_, data, _ := nsq.UnpackResponse(resp)
-		if !bytes.Equal(data, []byte("OK")) {
+		_, data, err := nsq.ReadUnpackedResponse(rw)
+		if err != nil || !bytes.Equal(data, []byte("OK")) {
 			panic("invalid response")
 		}
 	}

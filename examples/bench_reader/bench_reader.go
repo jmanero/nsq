@@ -71,11 +71,7 @@ func subWorker(n int, workers int, tcpAddr string, topic string, channel string,
 	numRdy := num/rdyCount - 1
 	rdy := rdyCount
 	for i := 0; i < num; i += 1 {
-		resp, err := nsq.ReadResponse(rw)
-		if err != nil {
-			panic(err.Error())
-		}
-		frameType, data, err := nsq.UnpackResponse(resp)
+		frameType, data, err := nsq.ReadUnpackedResponse(rw)
 		if err != nil {
 			panic(err.Error())
 		}

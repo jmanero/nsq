@@ -36,11 +36,11 @@ func (n *NSQd) lookupLoop() {
 				lp.Close()
 				return
 			}
-			resp, err := lp.Command(cmd)
+			frameType, resp, err := lp.Command(cmd)
 			if err != nil {
 				log.Printf("LOOKUPD(%s): ERROR %s - %s", lp, cmd, err.Error())
-			} else if bytes.Equal(resp, []byte("E_INVALID")) {
-				log.Printf("LOOKUPD(%s): lookupd returned %s", lp, resp)
+			} else if frameType == nsq.FrameTypeError {
+				log.Printf("LOOKUPD(%s): returned error %s", lp, resp)
 			} else {
 				err = json.Unmarshal(resp, &lp.Info)
 				if err != nil {
@@ -67,7 +67,7 @@ func (n *NSQd) lookupLoop() {
 			for _, lookupPeer := range n.lookupPeers {
 				log.Printf("LOOKUPD(%s): sending heartbeat", lookupPeer)
 				cmd := nsq.Ping()
-				_, err := lookupPeer.Command(cmd)
+				_, _, err := lookupPeer.Command(cmd)
 				if err != nil {
 					log.Printf("LOOKUPD(%s): ERROR %s - %s", lookupPeer, cmd, err.Error())
 				}
@@ -99,9 +99,11 @@ func (n *NSQd) lookupLoop() {
 
 			for _, lookupPeer := range n.lookupPeers {
 				log.Printf("LOOKUPD(%s): %s %s", lookupPeer, branch, cmd)
-				_, err := lookupPeer.Command(cmd)
+				frameType, resp, err := lookupPeer.Command(cmd)
 				if err != nil {
 					log.Printf("LOOKUPD(%s): ERROR %s - %s", lookupPeer, cmd, err.Error())
+				} else if frameType == nsq.FrameTypeError {
+					log.Printf("LOOKUPD(%s): returned error %s", lookupPeer, resp)
 				}
 			}
 		case lookupPeer := <-syncTopicChan:
@@ -123,10 +125,12 @@ func (n *NSQd) lookupLoop() {
 
 			for _, cmd := range commands {
 				log.Printf("LOOKUPD(%s): %s", lookupPeer, cmd)
-				_, err := lookupPeer.Command(cmd)
+				frameType, resp, err := lookupPeer.Command(cmd)
 				if err != nil {
 					log.Printf("LOOKUPD(%s): ERROR %s - %s", lookupPeer, cmd, err.Error())
 					break
+				} else if frameType == nsq.FrameTypeError {
+					log.Printf("LOOKUPD(%s): returned error %s", lookupPeer, resp)
 				}
 			}
 		case <-n.exitChan:
