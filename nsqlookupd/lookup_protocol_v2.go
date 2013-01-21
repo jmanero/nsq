@@ -35,9 +35,19 @@ func (p *LookupProtocolV2) IOLoop(conn net.Conn) error {
 
 		response, err := Exec(client, reader, params)
 		if err != nil {
-			log.Printf("ERROR: CLIENT(%s) - %s", client, err.(*nsq.ClientErr).Description())
+			context := ""
+			if parentErr := err.(nsq.ChildError).Parent(); parentErr != nil {
+				context = " - " + parentErr.Error()
+			}
+			log.Printf("ERROR: [%s] - %s%s", client, err.Error(), context)
+
 			_, err = nsq.SendFramedResponse(client, nsq.FrameTypeError, []byte(err.Error()))
 			if err != nil {
+				break
+			}
+
+			// errors of type FatalClientErr should forceably close the connection
+			if _, ok := err.(*nsq.FatalClientErr); ok {
 				break
 			}
 			continue

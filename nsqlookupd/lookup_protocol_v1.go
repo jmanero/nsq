@@ -44,7 +44,7 @@ func (p *LookupProtocolV1) IOLoop(conn net.Conn) error {
 			}
 			log.Printf("ERROR: [%s] - %s%s", client, err.Error(), context)
 
-			_, err = nsq.SendResponse(client, []byte(err.Error()))
+			_, err = SendResponse(client, []byte(err.Error()))
 			if err != nil {
 				break
 			}

@@ -184,7 +184,7 @@ func IDENTIFY(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, 
 
 	response, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("ERROR: marshaling %v", data)
+		log.Printf("ERROR: marshaling %+v", data)
 		return []byte("OK"), nil
 	}
 	return response, nil

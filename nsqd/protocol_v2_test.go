@@ -73,9 +73,7 @@ func subFail(t *testing.T, conn net.Conn, topicName string, channelName string) 
 }
 
 func readValidateOK(t *testing.T, conn net.Conn) {
-	resp, err := nsq.ReadResponse(conn)
-	assert.Equal(t, err, nil)
-	frameType, data, err := nsq.UnpackResponse(resp)
+	frameType, data, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 	assert.Equal(t, frameType, nsq.FrameTypeResponse)
 	assert.Equal(t, data, []byte("OK"))
