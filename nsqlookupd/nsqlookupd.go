@@ -16,6 +16,7 @@ type NSQLookupd struct {
 	waitGroup               util.WaitGroupWrapper
 	inactiveProducerTimeout time.Duration
 	tombstoneLifetime       time.Duration
+	clientTimeout           time.Duration
 	DB                      *RegistrationDB
 }
 
@@ -23,6 +24,7 @@ func NewNSQLookupd() *NSQLookupd {
 	return &NSQLookupd{
 		inactiveProducerTimeout: 300 * time.Second,
 		tombstoneLifetime:       45 * time.Second,
+		clientTimeout:           nsq.DefaultClientTimeout,
 		DB:                      NewRegistrationDB(),
 	}
 }

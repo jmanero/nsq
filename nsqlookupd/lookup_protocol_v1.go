@@ -26,9 +26,8 @@ func (p *LookupProtocolV1) IOLoop(conn net.Conn) error {
 	var line string
 
 	client := NewClient(conn, "V1")
-	reader := bufio.NewReader(client)
 	for {
-		line, err = reader.ReadString('\n')
+		line, err = client.Reader.ReadString('\n')
 		if err != nil {
 			break
 		}
@@ -36,7 +35,7 @@ func (p *LookupProtocolV1) IOLoop(conn net.Conn) error {
 		line = strings.TrimSpace(line)
 		params := strings.Split(line, " ")
 
-		response, err := Exec(client, reader, params)
+		response, err := Exec(client, params)
 		if err != nil {
 			context := ""
 			if parentErr := err.(nsq.ChildError).Parent(); parentErr != nil {
@@ -65,15 +64,7 @@ func (p *LookupProtocolV1) IOLoop(conn net.Conn) error {
 	}
 
 	log.Printf("CLIENT(%s): closing", client)
-	if client.peerInfo != nil {
-		registrations := lookupd.DB.LookupRegistrations(client.peerInfo.id)
-		for _, r := range registrations {
-			if removed, _ := lookupd.DB.RemoveProducer(*r, client.peerInfo.id); removed {
-				log.Printf("DB: client(%s) UNREGISTER category:%s key:%s subkey:%s",
-					client, r.Category, r.Key, r.SubKey)
-			}
-		}
-	}
+	CleanupClientRegistrations(client)
 	return err
 }
 

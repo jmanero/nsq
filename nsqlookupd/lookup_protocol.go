@@ -3,7 +3,6 @@ package main
 import (
 	"../nsq"
 	"../util"
-	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -24,16 +23,16 @@ func init() {
 	}
 }
 
-func Exec(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, error) {
+func Exec(client *Client, params []string) ([]byte, error) {
 	switch params[0] {
 	case "PING":
 		return PING(client, params)
 	case "IDENTIFY":
-		return IDENTIFY(client, reader, params[1:])
+		return IDENTIFY(client, params[1:])
 	case "REGISTER":
-		return REGISTER(client, reader, params[1:])
+		return REGISTER(client, params[1:])
 	case "UNREGISTER":
-		return UNREGISTER(client, reader, params[1:])
+		return UNREGISTER(client, params[1:])
 	}
 	return nil, nsq.NewFatalClientErr(nil, "E_INVALID", fmt.Sprintf("invalid command %s", params[0]))
 }
@@ -60,7 +59,19 @@ func getTopicChan(command string, params []string) (string, string, error) {
 	return topicName, channelName, nil
 }
 
-func REGISTER(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, error) {
+func CleanupClientRegistrations(client *Client) {
+	if client.peerInfo != nil {
+		registrations := lookupd.DB.LookupRegistrations(client.peerInfo.id)
+		for _, r := range registrations {
+			if removed, _ := lookupd.DB.RemoveProducer(*r, client.peerInfo.id); removed {
+				log.Printf("DB: client(%s) UNREGISTER category:%s key:%s subkey:%s",
+					client, r.Category, r.Key, r.SubKey)
+			}
+		}
+	}
+}
+
+func REGISTER(client *Client, params []string) ([]byte, error) {
 	if client.Producer == nil {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "client must IDENTIFY")
 	}
@@ -86,7 +97,7 @@ func REGISTER(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, 
 	return []byte("OK"), nil
 }
 
-func UNREGISTER(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, error) {
+func UNREGISTER(client *Client, params []string) ([]byte, error) {
 	if client.peerInfo == nil {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "client must IDENTIFY")
 	}
@@ -125,19 +136,19 @@ func UNREGISTER(client *ClientV1, reader *bufio.Reader, params []string) ([]byte
 	return []byte("OK"), nil
 }
 
-func IDENTIFY(client *ClientV1, reader *bufio.Reader, params []string) ([]byte, error) {
+func IDENTIFY(client *Client, params []string) ([]byte, error) {
 	if client.peerInfo != nil {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "cannot IDENTIFY again")
 	}
 
 	var bodyLen int32
-	err = binary.Read(reader, binary.BigEndian, &bodyLen)
+	err = binary.Read(client.Reader, binary.BigEndian, &bodyLen)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "IDENTIFY failed to read body size")
 	}
 
 	body := make([]byte, bodyLen)
-	_, err = io.ReadFull(reader, body)
+	_, err = io.ReadFull(client.Reader, body)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "IDENTIFY failed to read body")
 	}
