@@ -73,6 +73,33 @@ func SendFramedResponse(w io.Writer, frameType int32, data []byte) (int, error) 
 	return n + 8, err
 }
 
+func ReadResponse(r io.Reader) ([]byte, error) {
+	var msgSize int32
+
+	// message size
+	err := binary.Read(r, binary.BigEndian, &msgSize)
+	if err != nil {
+		return nil, err
+	}
+
+	// message binary data
+	buf := make([]byte, msgSize)
+	_, err = io.ReadFull(r, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(buf) < 4 {
+		return nil, errors.New("length of response is too small")
+	}
+
+	return buf, nil
+}
+
+func UnpackResponse(buf []byte) (int32, []byte) {
+	return int32(binary.BigEndian.Uint32(buf)), buf[4:]
+}
+
 // ReadUnpackedResponse is a client-side utility function that reads
 // and unpacks serialized data according to NSQ protocol spec:
 //
