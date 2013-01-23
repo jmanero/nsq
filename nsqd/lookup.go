@@ -22,7 +22,7 @@ func (n *NSQd) lookupLoop() {
 
 	for _, host := range n.lookupdTCPAddrs {
 		log.Printf("LOOKUP: adding peer %s", host)
-		lookupPeer := nsq.NewLookupPeer(host, func(lp *nsq.LookupPeer) {
+		lookupPeer := nsq.NewLookupPeer(host, func(lp *nsq.LookupPeer) error {
 			ci := make(map[string]interface{})
 			ci["version"] = util.BINARY_VERSION
 			ci["tcp_port"] = n.tcpAddr.Port
@@ -33,12 +33,13 @@ func (n *NSQd) lookupLoop() {
 
 			cmd, err := nsq.Identify(ci)
 			if err != nil {
-				lp.Close()
-				return
+				return err
 			}
+
 			frameType, resp, err := lp.Command(cmd)
 			if err != nil {
 				log.Printf("LOOKUPD(%s): ERROR %s - %s", lp, cmd, err.Error())
+				return err
 			} else if frameType == nsq.FrameTypeError {
 				log.Printf("LOOKUPD(%s): returned error %s", lp, resp)
 			} else {

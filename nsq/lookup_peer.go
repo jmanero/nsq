@@ -14,11 +14,10 @@ import (
 // gracefully (i.e. it is all handled by the library).  Clients can simply use the
 // Command interface to perform a round-trip.
 type LookupPeer struct {
-	sync.Mutex
 	addr            string
 	conn            net.Conn
 	state           int32
-	connectCallback func(*LookupPeer)
+	connectCallback func(*LookupPeer) error
 	Info            PeerInfo
 	dataChan        chan []byte
 	transactionChan chan *LookupTransaction
@@ -31,6 +30,7 @@ type LookupTransaction struct {
 	cmd       *Command
 	frameType int32
 	data      []byte
+	err       error
 }
 
 // PeerInfo contains metadata for a LookupPeer instance (and is JSON marshalable)
@@ -64,10 +64,9 @@ func (lp *LookupPeer) Connect() error {
 		return err
 	}
 	lp.conn = conn
+	atomic.StoreInt32(&lp.state, StateConnected)
 	lp.Write(MagicV2)
-	lp.state = StateConnected
-	lp.connectCallback(lp)
-	return nil
+	return lp.connectCallback(lp)
 }
 
 func (lp *LookupPeer) readLoop() {
@@ -88,16 +87,22 @@ func (lp *LookupPeer) readLoop() {
 }
 
 func (lp *LookupPeer) router() {
-	var err error
-
 	for {
 		select {
-		case transaction := <-lp.transactionChan:
-			err = transaction.cmd.Write(lp)
+		case t := <-lp.transactionChan:
+			if t.cmd == nil {
+				t.done <- 1
+				continue
+			}
+
+			err := transaction.cmd.Write(lp)
 			if err != nil {
 				lp.Close()
-				goto exit
+				t.err = err
+				t.done <- 1
+				continue
 			}
+
 			lp.transactions.PushBack(transaction)
 		case buf := <-lp.dataChan:
 			frameType, data := UnpackResponse(buf)
@@ -109,10 +114,10 @@ func (lp *LookupPeer) router() {
 
 			el := lp.transactions.Front()
 			lp.transactions.Remove(el)
-			transaction := el.Value.(*LookupTransaction)
-			transaction.frameType = frameType
-			transaction.data = data
-			transaction.doneChan <- 1
+			t := el.Value.(*LookupTransaction)
+			t.frameType = frameType
+			t.data = data
+			t.doneChan <- 1
 		case <-lp.exitChan:
 			goto exit
 		}
@@ -148,7 +153,7 @@ func (lp *LookupPeer) Write(data []byte) (int, error) {
 // Close implements the io.Closer interface
 func (lp *LookupPeer) Close() error {
 	close(lp.exitChan)
-	lp.state = StateDisconnected
+	atomic.StoreInt32(&lp.state, StateDisconnected)
 	return lp.conn.Close()
 }
 
@@ -159,27 +164,21 @@ func (lp *LookupPeer) Close() error {
 //
 // It returns the response from nsqlookupd
 func (lp *LookupPeer) Command(cmd *Command) (int32, []byte, error) {
-	lp.Lock()
-	defer lp.Unlock()
-
-	if lp.state == StateDisconnected {
+	if atomic.CompareAndSwapInt32(&lp.state, StateDisconnected, StateConnecting) {
 		err := lp.Connect()
 		if err != nil {
+			lp.Close()
 			return -1, nil, err
 		}
 	}
 
-	if cmd == nil {
-		return -1, nil, nil
+	t := &LookupTransaction{
+		frameType: -1,
+		doneChan:  make(chan int),
+		cmd:       cmd,
 	}
+	lp.transactionChan <- t
+	<-t.doneChan
 
-	doneChan := make(chan int)
-	transaction := &LookupTransaction{
-		doneChan: doneChan,
-		cmd:      cmd,
-	}
-	lp.transactionChan <- transaction
-	<-doneChan
-
-	return transaction.frameType, transaction.data, nil
+	return t.frameType, t.data, t.err
 }
