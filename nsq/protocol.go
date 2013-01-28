@@ -89,10 +89,6 @@ func ReadResponse(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	if len(buf) < 4 {
-		return nil, errors.New("length of response is too small")
-	}
-
 	return buf, nil
 }
 

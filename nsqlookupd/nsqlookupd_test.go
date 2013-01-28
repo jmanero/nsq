@@ -29,7 +29,7 @@ func mustConnectLookupd(t *testing.T, tcpAddr *net.TCPAddr) net.Conn {
 	if err != nil {
 		t.Fatal("failed to connect to lookupd")
 	}
-	conn.Write(nsq.MagicV1)
+	conn.Write(nsq.MagicV2)
 	return conn
 }
 
@@ -66,7 +66,7 @@ func TestBasicLookupd(t *testing.T) {
 	identify(t, conn, "ip.address", tcpPort, httpPort, "fake-version")
 
 	nsq.Register(topicName, "channel1").Write(conn)
-	v, err := nsq.ReadResponse(conn)
+	_, v, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 	assert.Equal(t, v, []byte("OK"))
 
@@ -208,7 +208,7 @@ func TestTombstoneRecover(t *testing.T) {
 	identify(t, conn, "ip.address", 5000, 5555, "fake-version")
 
 	nsq.Register(topicName, "channel1").Write(conn)
-	_, err := nsq.ReadResponse(conn)
+	_, _, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 
 	nsq.Register(topicName2, "channel2").Write(conn)
@@ -254,7 +254,7 @@ func TestTombstoneUnregister(t *testing.T) {
 	identify(t, conn, "ip.address", 5000, 5555, "fake-version")
 
 	nsq.Register(topicName, "channel1").Write(conn)
-	_, err := nsq.ReadResponse(conn)
+	_, _, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 
 	endpoint := fmt.Sprintf("http://%s/tombstone_topic_producer?topic=%s&node=%s", httpAddr, topicName, "ip.address:5555")
@@ -268,7 +268,7 @@ func TestTombstoneUnregister(t *testing.T) {
 	assert.Equal(t, len(producers), 0)
 
 	nsq.UnRegister(topicName, "").Write(conn)
-	_, err = nsq.ReadResponse(conn)
+	_, _, err = nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 
 	time.Sleep(55 * time.Millisecond)

@@ -85,10 +85,10 @@ func (p *LookupProtocolV2) Send(client *Client, frameType int32, data []byte) er
 func (p *LookupProtocolV2) heartbeatLoop(client *Client) {
 	var err error
 
-	timer := time.NewTimer(lookupd.clientTimeout / 2)
+	ticker := time.NewTicker(lookupd.clientTimeout / 2)
 	for {
 		select {
-		case <-timer.C:
+		case <-ticker.C:
 			err = p.Send(client, nsq.FrameTypeResponse, []byte("_heartbeat_"))
 			if err != nil {
 				goto exit
@@ -100,7 +100,7 @@ func (p *LookupProtocolV2) heartbeatLoop(client *Client) {
 
 exit:
 	log.Printf("PROTOCOL(V2): [%s] exiting heartbeatLoop", client)
-	timer.Stop()
+	ticker.Stop()
 	if err != nil {
 		log.Printf("ERROR: [%s] - %s", client, err.Error())
 	}
