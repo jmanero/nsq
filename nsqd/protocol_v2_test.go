@@ -459,9 +459,8 @@ func TestTouch(t *testing.T) {
 	err = nsq.Ready(1).Write(conn)
 	assert.Equal(t, err, nil)
 
-	resp, err := nsq.ReadResponse(conn)
+	frameType, data, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
-	frameType, data, err := nsq.UnpackResponse(resp)
 	msgOut, _ := nsq.DecodeMessage(data)
 	assert.Equal(t, frameType, nsq.FrameTypeMessage)
 	assert.Equal(t, msgOut.Id, msg.Id)
