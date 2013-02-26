@@ -72,7 +72,7 @@ func CleanupClientRegistrations(client *Client) {
 }
 
 func REGISTER(client *Client, params []string) ([]byte, error) {
-	if client.Producer == nil {
+	if client.peerInfo == nil {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "client must IDENTIFY")
 	}
 
@@ -100,6 +100,11 @@ func REGISTER(client *Client, params []string) ([]byte, error) {
 func UNREGISTER(client *Client, params []string) ([]byte, error) {
 	if client.peerInfo == nil {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "client must IDENTIFY")
+	}
+
+	topic, channel, err := getTopicChan("UNREGISTER", params)
+	if err != nil {
+		return nil, err
 	}
 
 	if channel != "" {
@@ -142,7 +147,7 @@ func IDENTIFY(client *Client, params []string) ([]byte, error) {
 	}
 
 	var bodyLen int32
-	err = binary.Read(client.Reader, binary.BigEndian, &bodyLen)
+	err := binary.Read(client.Reader, binary.BigEndian, &bodyLen)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "IDENTIFY failed to read body size")
 	}
@@ -201,7 +206,7 @@ func IDENTIFY(client *Client, params []string) ([]byte, error) {
 	return response, nil
 }
 
-func PING(client *ClientV1, params []string) ([]byte, error) {
+func PING(client *Client, params []string) ([]byte, error) {
 	if client.peerInfo != nil {
 		// we could get a PING before other commands on the same client connection
 		now := time.Now()

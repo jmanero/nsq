@@ -1,7 +1,6 @@
 package main
 
 import (
-	"../nsq"
 	"bufio"
 	"net"
 	"sync"
@@ -10,7 +9,6 @@ import (
 type Client struct {
 	sync.RWMutex
 	net.Conn
-	State    int
 	Version  string
 	peerInfo *PeerInfo
 	Reader   *bufio.Reader
@@ -20,13 +18,12 @@ type Client struct {
 func NewClient(conn net.Conn, version string) *Client {
 	return &Client{
 		Reader:   bufio.NewReaderSize(conn, 16*1024),
-		State:    nsq.StateInit,
 		Conn:     conn,
 		Version:  version,
 		ExitChan: make(chan int, 0),
 	}
 }
 
-func (c *ClientV1) String() string {
+func (c *Client) String() string {
 	return c.RemoteAddr().String()
 }
