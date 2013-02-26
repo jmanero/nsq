@@ -44,8 +44,9 @@ func identify(t *testing.T, conn net.Conn, address string, tcpPort int, httpPort
 	cmd, _ := nsq.Identify(ci)
 	err := cmd.Write(conn)
 	assert.Equal(t, err, nil)
-	_, err = nsq.ReadResponse(conn)
+	frameType, _, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
+	assert.Equal(t, frameType, nsq.FrameTypeResponse)
 }
 
 func TestBasicLookupd(t *testing.T) {
@@ -162,9 +163,10 @@ func TestChannelUnregister(t *testing.T) {
 	identify(t, conn, "ip.address", tcpPort, httpPort, "fake-version")
 
 	nsq.Register(topicName, "ch1").Write(conn)
-	v, err := nsq.ReadResponse(conn)
+	frameType, data, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, v, []byte("OK"))
+	assert.Equal(t, frameType, nsq.FrameTypeResponse)
+	assert.Equal(t, data, []byte("OK"))
 
 	topics = lookupd.DB.FindRegistrations("topic", topicName, "")
 	assert.Equal(t, len(topics), 1)
@@ -173,9 +175,10 @@ func TestChannelUnregister(t *testing.T) {
 	assert.Equal(t, len(channels), 1)
 
 	nsq.UnRegister(topicName, "ch1").Write(conn)
-	v, err = nsq.ReadResponse(conn)
+	frameType, data, err = nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, v, []byte("OK"))
+	assert.Equal(t, frameType, nsq.FrameTypeResponse)
+	assert.Equal(t, data, []byte("OK"))
 
 	topics = lookupd.DB.FindRegistrations("topic", topicName, "")
 	assert.Equal(t, len(topics), 1)
@@ -186,9 +189,9 @@ func TestChannelUnregister(t *testing.T) {
 	assert.Equal(t, len(channels), 1)
 
 	endpoint := fmt.Sprintf("http://%s/lookup?topic=%s", httpAddr, topicName)
-	data, err := nsq.ApiRequest(endpoint)
+	jsdata, err := nsq.ApiRequest(endpoint)
 	assert.Equal(t, err, nil)
-	returnedProducers, err := data.Get("producers").Array()
+	returnedProducers, err := jsdata.Get("producers").Array()
 	assert.Equal(t, err, nil)
 	assert.Equal(t, len(returnedProducers), 1)
 }
@@ -212,7 +215,7 @@ func TestTombstoneRecover(t *testing.T) {
 	assert.Equal(t, err, nil)
 
 	nsq.Register(topicName2, "channel2").Write(conn)
-	_, err = nsq.ReadResponse(conn)
+	_, _, err = nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, err, nil)
 
 	endpoint := fmt.Sprintf("http://%s/tombstone_topic_producer?topic=%s&node=%s", httpAddr, topicName, "ip.address:5555")
