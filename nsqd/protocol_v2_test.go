@@ -67,8 +67,7 @@ func sub(t *testing.T, conn net.Conn, topicName string, channelName string) {
 func subFail(t *testing.T, conn net.Conn, topicName string, channelName string) {
 	err := nsq.Subscribe(topicName, channelName).Write(conn)
 	assert.Equal(t, err, nil)
-	resp, err := nsq.ReadResponse(conn)
-	frameType, _, err := nsq.UnpackResponse(resp)
+	frameType, _, err := nsq.ReadUnpackedResponse(conn)
 	assert.Equal(t, frameType, nsq.FrameTypeError)
 }
 

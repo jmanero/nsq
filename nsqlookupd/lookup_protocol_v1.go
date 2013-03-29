@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
-	"encoding/json"
-	"fmt"
 	"github.com/bitly/nsq/nsq"
-	"github.com/bitly/nsq/util"
 	"io"
 	"log"
 	"net"

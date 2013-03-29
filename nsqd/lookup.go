@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"github.com/bitly/nsq/nsq"
 	"github.com/bitly/nsq/util"
 	"log"
