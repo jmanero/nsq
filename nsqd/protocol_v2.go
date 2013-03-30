@@ -16,8 +16,14 @@ import (
 
 const maxTimeout = time.Hour
 
+var separatorBytes = []byte(" ")
+var heartbeatBytes = []byte("_heartbeat_")
+var okBytes = []byte("OK")
+
 type ProtocolV2 struct {
 	nsq.Protocol
+	lenBuf   [4]byte
+	lenSlice []byte
 }
 
 func init() {
@@ -28,6 +34,8 @@ func (p *ProtocolV2) IOLoop(conn net.Conn) error {
 	var err error
 	var line []byte
 	var zeroTime time.Time
+
+	p.lenSlice = p.lenBuf[:]
 
 	client := NewClientV2(conn)
 	go p.messagePump(client)
@@ -51,7 +59,7 @@ func (p *ProtocolV2) IOLoop(conn net.Conn) error {
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
-		params := bytes.Split(line, []byte(" "))
+		params := bytes.Split(line, separatorBytes)
 
 		if *verbose {
 			log.Printf("PROTOCOL(V2): [%s] %s", client, params)
@@ -238,7 +246,7 @@ func (p *ProtocolV2) messagePump(client *ClientV2) {
 			// you can't update heartbeat anymore
 			heartbeatUpdateChan = nil
 		case <-client.Heartbeat.C:
-			err = p.Send(client, nsq.FrameTypeResponse, []byte("_heartbeat_"))
+			err = p.Send(client, nsq.FrameTypeResponse, heartbeatBytes)
 			if err != nil {
 				log.Printf("PROTOCOL(V2): error sending heartbeat - %s", err.Error())
 			}
@@ -276,8 +284,7 @@ func (p *ProtocolV2) IDENTIFY(client *ClientV2, params [][]byte) ([]byte, error)
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "cannot IDENTIFY in current state")
 	}
 
-	var bodyLen int32
-	err = binary.Read(client.Reader, binary.BigEndian, &bodyLen)
+	bodyLen, err := p.readLen(client)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "IDENTIFY failed to read body size")
 	}
@@ -327,7 +334,7 @@ func (p *ProtocolV2) IDENTIFY(client *ClientV2, params [][]byte) ([]byte, error)
 		client.HeartbeatInterval = interval
 	}
 
-	return []byte("OK"), nil
+	return okBytes, nil
 }
 
 func (p *ProtocolV2) SUB(client *ClientV2, params [][]byte) ([]byte, error) {
@@ -364,7 +371,7 @@ func (p *ProtocolV2) SUB(client *ClientV2, params [][]byte) ([]byte, error) {
 	// update message pump
 	client.SubEventChan <- channel
 
-	return []byte("OK"), nil
+	return okBytes, nil
 }
 
 func (p *ProtocolV2) RDY(client *ClientV2, params [][]byte) ([]byte, error) {
@@ -478,7 +485,6 @@ func (p *ProtocolV2) NOP(client *ClientV2, params [][]byte) ([]byte, error) {
 
 func (p *ProtocolV2) PUB(client *ClientV2, params [][]byte) ([]byte, error) {
 	var err error
-	var bodyLen int32
 
 	if len(params) < 2 {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "PUB insufficient number of parameters")
@@ -490,7 +496,7 @@ func (p *ProtocolV2) PUB(client *ClientV2, params [][]byte) ([]byte, error) {
 			fmt.Sprintf("PUB topic name '%s' is not valid", topicName))
 	}
 
-	err = binary.Read(client.Reader, binary.BigEndian, &bodyLen)
+	bodyLen, err := p.readLen(client)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_MESSAGE", "PUB failed to read message body size")
 	}
@@ -513,14 +519,11 @@ func (p *ProtocolV2) PUB(client *ClientV2, params [][]byte) ([]byte, error) {
 		return nil, nsq.NewFatalClientErr(err, "E_PUB_FAILED", "PUB failed "+err.Error())
 	}
 
-	return []byte("OK"), nil
+	return okBytes, nil
 }
 
 func (p *ProtocolV2) MPUB(client *ClientV2, params [][]byte) ([]byte, error) {
 	var err error
-	var bodyLen int32
-	var numMessages int32
-	var messageSize int32
 
 	if len(params) < 2 {
 		return nil, nsq.NewFatalClientErr(nil, "E_INVALID", "MPUB insufficient number of parameters")
@@ -532,7 +535,7 @@ func (p *ProtocolV2) MPUB(client *ClientV2, params [][]byte) ([]byte, error) {
 			fmt.Sprintf("E_BAD_TOPIC MPUB topic name '%s' is not valid", topicName))
 	}
 
-	err = binary.Read(client.Reader, binary.BigEndian, &bodyLen)
+	bodyLen, err := p.readLen(client)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "MPUB failed to read body size")
 	}
@@ -542,14 +545,14 @@ func (p *ProtocolV2) MPUB(client *ClientV2, params [][]byte) ([]byte, error) {
 			fmt.Sprintf("MPUB body too big %d > %d", bodyLen, nsqd.options.maxBodySize))
 	}
 
-	err = binary.Read(client.Reader, binary.BigEndian, &numMessages)
+	numMessages, err := p.readLen(client)
 	if err != nil {
 		return nil, nsq.NewFatalClientErr(err, "E_BAD_BODY", "MPUB failed to read message count")
 	}
 
 	messages := make([]*nsq.Message, 0, numMessages)
 	for i := int32(0); i < numMessages; i++ {
-		err = binary.Read(client.Reader, binary.BigEndian, &messageSize)
+		messageSize, err := p.readLen(client)
 		if err != nil {
 			return nil, nsq.NewFatalClientErr(err, "E_BAD_MESSAGE",
 				fmt.Sprintf("MPUB failed to read message(%d) body size", i))
@@ -579,7 +582,7 @@ func (p *ProtocolV2) MPUB(client *ClientV2, params [][]byte) ([]byte, error) {
 		return nil, nsq.NewFatalClientErr(err, "E_MPUB_FAILED", "MPUB failed "+err.Error())
 	}
 
-	return []byte("OK"), nil
+	return okBytes, nil
 }
 
 func (p *ProtocolV2) TOUCH(client *ClientV2, params [][]byte) ([]byte, error) {
@@ -602,4 +605,13 @@ func (p *ProtocolV2) TOUCH(client *ClientV2, params [][]byte) ([]byte, error) {
 	}
 
 	return nil, nil
+}
+
+func (p *ProtocolV2) readLen(client *ClientV2) (int32, error) {
+	p.lenSlice = p.lenSlice[0:]
+	_, err := io.ReadFull(client.Reader, p.lenSlice)
+	if err != nil {
+		return 0, err
+	}
+	return int32(binary.BigEndian.Uint32(p.lenSlice)), nil
 }
