@@ -108,9 +108,8 @@ initial set of requests to the configured instances.
 
 ### Connection Handling
 
-After discovery (or when configured with a specific `nsqd` instances to connect to) the client 
-library should open a TCP connection to the `address:port` for each topic the client wants
-to consume.
+After discovery (or when configured with specific `nsqd` instances to connect to) the client library
+should open a TCP connection to the `address:port` for each topic the client wants to consume.
 
 More detailed steps on the protocol are available in the [protocol spec](protocol.md) however, in
 short, the library should send the following data (in order):
@@ -160,7 +159,7 @@ When the IO loop unpacks a message it should route that message to the configure
 processing.
 
 The `nsqd` that pushed the message will expect a reply within a configurable amount of time (default
-is 60s).  There are a few possible options:
+is 60s).  There are a few possible scenarios:
 
  1. The callback indicates that the message was handled successfully.
  2. The callback indicates that the message handling was unsuccessful.
