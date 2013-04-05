@@ -52,6 +52,10 @@ re-queueing the message. NSQ supports sending a delay along with the `REQ` comma
 are expected to provide options for what this delay should be set to initially (for the first
 failure) and how it should change for subsequent failures. For more detail see [Backoff](#backoff).
 
+Most importantly, the client library should support some method of configuring callbacks for message
+processing. The signature of these callbacks should be simple, typically just the message object,
+with enough state passed to be able to reply over the corresponding TCP connection.
+
 ### Discovery
 
 An important component of NSQ is `nsqlookupd`.  It provides a discovery service for consumers to
@@ -147,6 +151,26 @@ conveniently the best spot to handle heartbeats.
 
 Related to connection handling, the overwhelming majority of protocol level error handling is fatal.
 This means that if the client sends an invalid command or gets itself into an invalid state the
-`nsqd` instance it is connected to will protect itself and the system by forceable closing
+`nsqd` instance it is connected to will protect itself (and the system) by forceable closing
 the connection (and, if possible, sending the error to the client).
 
+### Message Handling
+
+When the IO loop unpacks a message it should route that message to the configured callback for 
+processing.
+
+The `nsqd` that pushed the message will expect a reply within a configurable amount of time (default
+is 60s).  There are a few possible options:
+
+ 1. The callback indicates that the message was handled successfully.
+ 2. The callback indicates that the message handling was unsuccessful.
+ 3. The callback decides that it needs more time to process the message.
+ 4. The in-flight timeout expires and `nsqd` automatically re-queues the message.
+
+In the first 3 cases, the client library should send the appropriate command on the client's behalf
+(`FIN`, `REQ`, and `TOUCH` respectively).
+
+The `FIN` command is the simplest of the 3. It tells `nsqd` that it can discard the message.
+
+The `REQ` command tells `nsqd` that the message should be re-queued (with an optional parameter
+specifying the *re-queue delay*).
