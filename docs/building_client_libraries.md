@@ -45,8 +45,12 @@ re-queueing the message. NSQ supports sending a delay along with the `REQ` comma
 are expected to provide options for what this delay should be set to initially (for the first
 failure) and how it should change for subsequent failures. For more detail see [Backoff](#backoff).
 
-When a client is configured to poll `nsqlookupd` the polling interval should be a configurable
-option. Additionally, because typical deployments of NSQ are in distributed environments with many
-producers and consumers, the client library should automatically add random jitter based on the
-configured value such that all clients to attempt to connect at the same time.
+When a client is configured to poll `nsqlookupd` the polling interval should be configurable.
+Additionally, because typical deployments of NSQ are in distributed environments with many producers
+and consumers, the client library should automatically add jitter based on a random % of the
+configured value. This will help avoid a thundering herd of connections.
 
+### Discovery
+
+An important component of NSQ is `nsqlookupd` which provides a discovery service for consumers to
+locate producers of a given topic at runtime.
