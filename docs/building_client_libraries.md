@@ -52,9 +52,9 @@ re-queueing the message. NSQ supports sending a delay along with the `REQ` comma
 are expected to provide options for what this delay should be set to initially (for the first
 failure) and how it should change for subsequent failures. For more detail see [Backoff](#backoff).
 
-Most importantly, the client library should support some method of configuring callbacks for message
-processing. The signature of these callbacks should be simple, typically just the message object,
-with enough state passed to be able to reply over the corresponding TCP connection.
+Most importantly, the client library should support some method of configuring callback handlers for
+message processing. The signature of these callbacks should be simple, typically just an instance of
+a "message object".
 
 ### Discovery
 
@@ -155,10 +155,10 @@ the connection (and, if possible, sending the error to the client).
 
 ### Message Handling
 
-When the IO loop unpacks a message it should route that message to the configured callback for 
+When the IO loop unpacks a message it should route that message to the configured handler for 
 processing.
 
-The `nsqd` instance expects to receive a reply within the server side configurable message timeout
+The `nsqd` instance expects to receive a reply within the server's configured message timeout
 (default 60s). There are a few possible scenarios:
 
  1. The callback indicates that the message was handled successfully.
@@ -179,7 +179,51 @@ user can implement special handling for failed messages that are discarded).
 
 If message handling requires more time than the configured message timeout the `TOUCH` command can
 be used to reset the timer on the `nsqd` side. This can be done repeatedly until the message is
-either `FIN` or `REQ` up to a server side configurable max timeout.
+either `FIN` or `REQ` up to the server's configured max timeout.
 
 Finally, if the `nsqd` instance receives *no* response, the message will time out and be
 automatically re-queued for delivery to an available client.
+
+Without digging into language specific implementation, we've found that structuring the above
+commands as "instance methods" on the "message object" and that instance be the thing that is passed
+to your message handler works best. This object needs to manage enough state to be able to reply
+over the corresponding TCP connection.
+
+The benefit of this is that it supports handler code that can be structured in both synchronous and
+asynchronous fashion. For trivial processing, being able to simply return a boolean to the client
+library indicating success/failure is powerful. Like this example in Python:
+
+```python
+import nsq
+
+def message_handler(msg):
+    # this method returns True/False and the client library
+    # will handle msg.finish() or msg.requeue() automagically
+    return process_message(msg.body)
+
+if __name__ == '__main__':
+    nsq.Reader(topic='test', channel='test', tasks={'handler_name': message_handler})
+    nsq.run()
+```
+
+For more complicated asynchronous processing, the API remains the same (again using Python):
+
+```python
+import nsq
+import functools
+
+def async_message_handler(msg):
+    callback = functools.partial(finish_async_http_request, msg=msg)
+    async_http_request('http://api.domain.net/endpoint', body=msg.body, callback=callback)
+
+def finish_async_http_request(response, msg):
+    if not response:
+        msg.requeue()
+    else:
+        msg.finish()
+
+if __name__ == '__main__':
+    nsq.Reader(topic='test', channel='test', tasks={'handler_name': async_message_handler})
+    nsq.run()
+```
+
