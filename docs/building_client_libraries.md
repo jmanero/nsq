@@ -158,8 +158,8 @@ the connection (and, if possible, sending the error to the client).
 When the IO loop unpacks a message it should route that message to the configured callback for 
 processing.
 
-The `nsqd` that pushed the message will expect a reply within a configurable amount of time (default
-is 60s).  There are a few possible scenarios:
+The `nsqd` instance expects to receive a reply within the server side configurable message timeout
+(default 60s). There are a few possible scenarios:
 
  1. The callback indicates that the message was handled successfully.
  2. The callback indicates that the message handling was unsuccessful.
@@ -172,4 +172,14 @@ In the first 3 cases, the client library should send the appropriate command on 
 The `FIN` command is the simplest of the 3. It tells `nsqd` that it can discard the message.
 
 The `REQ` command tells `nsqd` that the message should be re-queued (with an optional parameter
-specifying the *re-queue delay*).
+specifying the *re-queue delay*). This re-queue delay should grow based on the number of attempts (a
+multiple is typically sufficient). The client library should discard messages that exceed the
+configured max attempts with some a callback to indicate that this situation occurred (such that the
+user can implement special handling for failed messages that are discarded).
+
+If message handling requires more time than the configured message timeout the `TOUCH` command can
+be used to reset the timer on the `nsqd` side. This can be done repeatedly until the message is
+either `FIN` or `REQ` up to a server side configurable max timeout.
+
+Finally, if the `nsqd` instance receives *no* response, the message will time out and be
+automatically re-queued for delivery to an available client.
